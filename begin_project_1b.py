@@ -31,6 +31,29 @@ def shuffle_data (samples, labels):
     samples, labels = samples[idx], labels[idx]
     return samples, labels
 
+def init_bias(n = 1):
+    return(theano.shared(np.zeros(n) if n!=1 else 0., theano.config.floatX))
+
+def init_weights(n_in=1, n_out=1, logistic=True):
+    W_values = np.random.uniform(low=-np.sqrt(6. / (n_in + n_out)),
+                                 high=np.sqrt(6. / (n_in + n_out)),
+                                 size=(n_in, n_out) if n_out!=1 else (n_in))
+    if logistic == True:
+        W_values *= 4
+    #print(W_values)
+    return(theano.shared(W_values, theano.config.floatX))
+
+def set_bias(b, n = 1):
+    b.set_value(np.zeros(n) if n!=1 else 0.)
+
+def set_weights(w, n_in=1, n_out=1, logistic=True):
+    W_values = np.random.uniform(low=-np.sqrt(6. / (n_in + n_out)),
+                                 high=np.sqrt(6. / (n_in + n_out)),
+                                 size=(n_in, n_out) if n_out!=1 else (n_in))
+    if logistic == True:
+        W_values *= 4
+    w.set_value(W_values)
+
 #read and divide data into test and train sets 
 cal_housing = np.loadtxt('cal_housing.data', delimiter=',')
 X_data, Y_data = cal_housing[:,:8], cal_housing[:,-1]
@@ -62,14 +85,18 @@ d = T.matrix('d') # desired output
 no_samples = T.scalar('no_samples')
 
 # initialize weights and biases for hidden layer(s) and output layer
-w_o = theano.shared(np.random.randn(no_hidden1)*.01, floatX ) 
-b_o = theano.shared(np.random.randn()*.01, floatX)
-w_h1 = theano.shared(np.random.randn(no_features, no_hidden1)*.01, floatX )
-b_h1 = theano.shared(np.random.randn(no_hidden1)*0.01, floatX)
+# w_o = theano.shared(np.random.randn(no_hidden1)*.01, floatX )
+# b_o = theano.shared(np.random.randn()*.01, floatX)
+# w_h1 = theano.shared(np.random.randn(no_features, no_hidden1)*.01, floatX )
+# b_h1 = theano.shared(np.random.randn(no_hidden1)*0.01, floatX)
+
+w_o = init_weights(no_hidden1, 1)
+w_h1 = init_weights(no_features, no_hidden1)
+b_o = init_bias(1)
+b_h1 = init_bias(no_hidden1)
 
 # learning rate
-alpha = theano.shared(learning_rate, floatX) 
-
+alpha = theano.shared(learning_rate, floatX)
 
 #Define mathematical expression:
 h1_out = T.nnet.sigmoid(T.dot(x, w_h1) + b_h1)
@@ -98,11 +125,6 @@ test = theano.function(
     )
 
 
-train_cost = np.zeros(epochs)
-test_cost = np.zeros(epochs)
-test_accuracy = np.zeros(epochs)
-
-
 min_error = 1e+15
 best_iter = 0
 best_w_o = np.zeros(no_hidden1)
@@ -111,30 +133,115 @@ best_b_o = 0
 best_b_h1 = np.zeros(no_hidden1)
 
 alpha.set_value(learning_rate)
-print(alpha.get_value())
+
+values = [10**-3, 0.5*10**-3, 10**-4, 0.5*10**-4, 10**-5]
 
 t = time.time()
-fold_division = 2*X_data.shape[0] // 10
-for fold in range(no_folds):
-    start, end = fold * fold_division, (fold + 1) * fold_division
-    testFoldX, testFoldY = testX[start:end], testY[start:end]
-    trainFoldX, trainFoldY = np.append(trainX[:start], trainX[end:], axis=0), np.append(trainY[:start], trainY[end:], axis=0)
+fold_division = 2*trainX.shape[0] // 10
 
-    for iter in range(epochs):
-        if iter % 500 == 0:
-            print("Fold, Iter:", fold, iter)
+# repeat 5-fold validation for each value
+opt_val = []
+noExps = 1
+for exp in range(noExps):
+    # TODO: shuffle x and y
+    testX, testY = shuffle_data(testX, testY)
+    trainX, trainY = shuffle_data(trainX, trainY)
+    test_cost = []
 
-        trainFoldX, trainFoldY = shuffle_data(trainFoldX, trainFoldY)
-        train_cost[iter] = train(trainFoldX, np.transpose(trainFoldY))
-        pred, test_cost[iter], test_accuracy[iter] = test(testFoldX, np.transpose(testFoldY))
+    for val in values:
+        print("Iteration: ", val)
+        # initialize weights. why tho? value is bounded??
+        # w_o = theano.shared(np.random.randn(no_hidden1) * .01, floatX)
+        # b_o = theano.shared(np.random.randn() * .01, floatX)
+        # w_h1 = theano.shared(np.random.randn(no_features, no_hidden1) * .01, floatX)
+        # b_h1 = theano.shared(np.random.randn(no_hidden1) * 0.01, floatX)
 
-        if test_cost[iter] < min_error:
-            best_iter = iter
-            min_error = test_cost[iter]
-            best_w_o = w_o.get_value()
-            best_w_h1 = w_h1.get_value()
-            best_b_o = b_o.get_value()
-            best_b_h1 = b_h1.get_value()
+        # reinitialize
+        set_weights(w_o, no_hidden1, 1)
+        set_weights(w_h1, no_features, no_hidden1)
+        set_bias(b_o, 1)
+        set_bias(b_h1, no_hidden1)
+
+        # w_o = init_weights(1, no_hidden1)
+        # w_h1 = init_weights(no_features, no_hidden1)
+        # b_o = init_bias(1)
+        # b_h1 = init_bias(no_hidden1)
+
+        # update value
+        alpha.set_value(val)
+
+        fold_cost = []
+        for fold in range(no_folds):
+            start, end = fold * fold_division, (fold + 1) * fold_division
+            testFoldX, testFoldY = testX[start:end], testY[start:end]
+            trainFoldX, trainFoldY = np.append(trainX[:start], trainX[end:], axis=0), np.append(trainY[:start], trainY[end:], axis=0)
+
+            # reset weights
+            # w_o.set_value(np.random.randn(no_hidden1) * .01, floatX)
+            # b_o.set_value(np.random.randn() * .01, floatX)
+            # w_h1.set_value(np.random.randn(no_features, no_hidden1) * .01, floatX)
+            # b_h1.set_value(np.random.randn(no_hidden1) * .01, floatX)
+
+            set_weights(w_o, no_hidden1, 1)
+            set_weights(w_h1, no_features, no_hidden1)
+            set_bias(b_o, 1)
+            set_bias(b_h1, no_hidden1)
+
+            min_cost = 1e+15
+            for iter in range(epochs):
+                train(trainFoldX, np.transpose(trainFoldY))
+                # need to get cost output
+                err = test(testFoldX, np.transpose(testFoldY))[1]
+                if err < min_cost:
+                    min_cost = err
+            fold_cost = np.append(fold_cost, min_cost)
+        # test cost for each value
+        test_cost = np.append(test_cost, np.mean(fold_cost))
+        print("Test cost:", test_cost)
+    # array of value with least test cost for each experiment (in array index)
+    opt_val = np.append(opt_val, values[np.argmin(test_cost)])
+
+# Select best value of whatever parameter
+counts = []
+for val in values:
+    counts = np.append(counts, np.sum(opt_val == val))
+print(counts)
+opt_val = opt_val[np.argmax(counts)]
+
+print("Optimum value:", opt_val)
+
+alpha.set_value(opt_val)
+
+train_cost = np.zeros(epochs)
+test_cost = np.zeros(epochs)
+test_accuracy = np.zeros(epochs)
+
+# w_o = theano.shared(np.random.randn(no_hidden1)*.01, floatX )
+# b_o = theano.shared(np.random.randn()*.01, floatX)
+# w_h1 = theano.shared(np.random.randn(no_features, no_hidden1)*.01, floatX )
+# b_h1 = theano.shared(np.random.randn(no_hidden1)*0.01, floatX)
+
+set_weights(w_o, no_hidden1, 1)
+set_weights(w_h1, no_features, no_hidden1)
+set_bias(b_o, 1)
+set_bias(b_h1, no_hidden1)
+
+# train with best value
+for iter in range(epochs):
+    if iter % 500 == 0:
+        print("Iter:", iter)
+
+    trainX, trainY = shuffle_data(trainX, trainY)
+    train_cost[iter] = train(trainX, np.transpose(trainY))
+    pred, test_cost[iter], test_accuracy[iter] = test(testX, np.transpose(testY))
+
+    if test_cost[iter] < min_error:
+        best_iter = iter
+        min_error = test_cost[iter]
+        best_w_o = w_o.get_value()
+        best_w_h1 = w_h1.get_value()
+        best_b_o = b_o.get_value()
+        best_b_h1 = b_h1.get_value()
 
 #set weights and biases to values at which performance was best
 w_o.set_value(best_w_o)
