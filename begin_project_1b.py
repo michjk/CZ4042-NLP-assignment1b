@@ -143,18 +143,13 @@ fold_division = 2*trainX.shape[0] // 10
 opt_val = []
 noExps = 1
 for exp in range(noExps):
-    # TODO: shuffle x and y
-    testX, testY = shuffle_data(testX, testY)
     trainX, trainY = shuffle_data(trainX, trainY)
     test_cost = []
 
     for val in values:
+        train_cost_plot = np.zeros([no_folds, epochs])
+        test_cost_plot = np.zeros([no_folds, epochs])
         print("Iteration: ", val)
-        # initialize weights. why tho? value is bounded??
-        # w_o = theano.shared(np.random.randn(no_hidden1) * .01, floatX)
-        # b_o = theano.shared(np.random.randn() * .01, floatX)
-        # w_h1 = theano.shared(np.random.randn(no_features, no_hidden1) * .01, floatX)
-        # b_h1 = theano.shared(np.random.randn(no_hidden1) * 0.01, floatX)
 
         # reinitialize
         set_weights(w_o, no_hidden1, 1)
@@ -162,26 +157,16 @@ for exp in range(noExps):
         set_bias(b_o, 1)
         set_bias(b_h1, no_hidden1)
 
-        # w_o = init_weights(1, no_hidden1)
-        # w_h1 = init_weights(no_features, no_hidden1)
-        # b_o = init_bias(1)
-        # b_h1 = init_bias(no_hidden1)
-
         # update value
         alpha.set_value(val)
 
         fold_cost = []
         for fold in range(no_folds):
             start, end = fold * fold_division, (fold + 1) * fold_division
-            testFoldX, testFoldY = testX[start:end], testY[start:end]
+            testFoldX, testFoldY = trainX[start:end], trainY[start:end]
             trainFoldX, trainFoldY = np.append(trainX[:start], trainX[end:], axis=0), np.append(trainY[:start], trainY[end:], axis=0)
 
             # reset weights
-            # w_o.set_value(np.random.randn(no_hidden1) * .01, floatX)
-            # b_o.set_value(np.random.randn() * .01, floatX)
-            # w_h1.set_value(np.random.randn(no_features, no_hidden1) * .01, floatX)
-            # b_h1.set_value(np.random.randn(no_hidden1) * .01, floatX)
-
             set_weights(w_o, no_hidden1, 1)
             set_weights(w_h1, no_features, no_hidden1)
             set_bias(b_o, 1)
@@ -189,15 +174,25 @@ for exp in range(noExps):
 
             min_cost = 1e+15
             for iter in range(epochs):
-                train(trainFoldX, np.transpose(trainFoldY))
-                # need to get cost output
-                err = test(testFoldX, np.transpose(testFoldY))[1]
+                train_cost_plot[fold][iter] = train(trainFoldX, np.transpose(trainFoldY))
+                test_cost_plot[fold][iter] = test(testFoldX, np.transpose(testFoldY))[1]
+                err = test_cost_plot[fold][iter]
                 if err < min_cost:
                     min_cost = err
             fold_cost = np.append(fold_cost, min_cost)
         # test cost for each value
         test_cost = np.append(test_cost, np.mean(fold_cost))
         print("Test cost:", test_cost)
+
+        plt.figure()
+        plt.plot(range(epochs), np.mean(train_cost_plot, axis=0), label='train error')
+        plt.plot(range(epochs), np.mean(test_cost_plot, axis=0), label='validation error')
+        plt.xlabel('Epochs')
+        plt.ylabel('Mean Squared Error')
+        plt.title('Training and Validation Errors at Alpha = %f' % alpha.get_value())
+        plt.legend()
+        plt.savefig('p_1b_alpha_mse_%f.png' % alpha.get_value())
+        plt.show()
     # array of value with least test cost for each experiment (in array index)
     opt_val = np.append(opt_val, values[np.argmin(test_cost)])
 
@@ -259,7 +254,7 @@ plt.plot(range(epochs), train_cost, label='train error')
 plt.plot(range(epochs), test_cost, label = 'test error')
 plt.xlabel('Time (s)')
 plt.ylabel('Mean Squared Error')
-plt.title('Training and Test Errors at Alpha = %.3f'%learning_rate)
+plt.title('Training and Test Errors at Alpha = %.3f'%alpha.get_value())
 plt.legend()
 plt.savefig('p_1b_sample_mse.png')
 plt.show()
