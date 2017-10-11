@@ -71,23 +71,18 @@ def preprocess_data(dataset):
 
     return trainX, testX, trainY, testY
 
-def initialize_weights_bias():
-    w_o = init_weights(no_hidden2, no_output, False)
+def initialize_weights():
+    w_o = init_weights(no_hidden1, no_output, False)
     w_h1 = init_weights(no_features, no_hidden1)
-    w_h2 = init_weights(no_hidden1, no_hidden2)
     b_o = init_bias(no_output)
     b_h1 = init_bias(no_hidden1)
-    b_h2 = init_bias(no_hidden2)
+    return w_o, w_h1, b_o, b_h1
 
-    return w_o, w_h1, w_h2, b_o, b_h1, b_h2
-
-def reset_weights():
-    set_weights(w_o, no_hidden2, no_output, False)
-    set_weights(w_h1, no_features, no_hidden1)
-    set_weights(w_h2, no_hidden1, no_hidden2)
+def reset_weights(no_hidden):
+    set_weights(w_o, no_hidden, no_output, False)
+    set_weights(w_h1, no_features, no_hidden)
     set_bias(b_o, no_output)
-    set_bias(b_h1, no_hidden1)
-    set_bias(b_h2, no_hidden2)
+    set_bias(b_h1, no_hidden)
 
 def create_nn():
     x = T.matrix('x')  # data sample
@@ -96,14 +91,13 @@ def create_nn():
 
     # Define mathematical expression:
     h1_out = T.nnet.sigmoid(T.dot(x, w_h1) + b_h1)
-    h2_out = T.nnet.sigmoid(T.dot(h1_out, w_h2) + b_h2)
-    y = T.dot(h2_out, w_o) + b_o
+    y = T.dot(h1_out, w_o) + b_o
 
     cost = T.abs_(T.mean(T.sqr(d - y)))
     accuracy = T.mean(d - y)
 
     # define gradients
-    dw_o, db_o, dw_h, db_h, dw_h2, db_h2 = T.grad(cost, [w_o, b_o, w_h1, b_h1, w_h2, b_h2])
+    dw_o, db_o, dw_h, db_h = T.grad(cost, [w_o, b_o, w_h1, b_h1])
 
     train = theano.function(
         inputs=[x, d],
@@ -111,9 +105,7 @@ def create_nn():
         updates=[[w_o, w_o - alpha * dw_o],
                  [b_o, b_o - alpha * db_o],
                  [w_h1, w_h1 - alpha * dw_h],
-                 [b_h1, b_h1 - alpha * db_h],
-                 [w_h2, w_h2 - alpha * dw_h2],
-                 [b_h2, b_h2 - alpha * db_h2]],
+                 [b_h1, b_h1 - alpha * db_h]],
         allow_input_downcast=True
     )
 
@@ -125,21 +117,79 @@ def create_nn():
 
     return train, test
 
+def kfold(no_exps, values, no_fold, epochs, trainX, trainY, train, test):
+    t = time.time()
+    fold_division = trainX.shape[0] // no_fold
+
+    # repeat 5-fold validation for each value
+    opt_val = []
+    for exp in range(no_exps):
+        trainX, trainY = shuffle_data(trainX, trainY)
+        test_cost = []
+        for val in values:
+            # FOR PLOTTING
+            train_cost_plot = np.zeros([no_folds, epochs])
+            test_cost_plot = np.zeros([no_folds, epochs])
+            print("Iteration: ", val)
+            reset_weights(no_hidden1)
+            alpha.set_value(val)
+            fold_cost = []
+            for fold in range(no_folds):
+                start, end = fold * fold_division, (fold + 1) * fold_division
+                testFoldX, testFoldY = trainX[start:end], trainY[start:end]
+                trainFoldX, trainFoldY = np.append(trainX[:start], trainX[end:], axis=0), np.append(trainY[:start],
+                                                                                                    trainY[end:], axis=0)
+                # reset weights
+                reset_weights(no_hidden1)
+                min_cost = 1e+15
+                for iter in range(epochs):
+                    for start, end in zip(range(0, len(trainFoldX), batch_size),
+                                          range(batch_size, len(trainFoldX), batch_size)):
+                        train_cost_plot[fold][iter] += train(trainFoldX[start:end], trainFoldY[start:end])
+                    # Get test cost
+                    train_cost_plot[fold][iter] /= (len(trainFoldX) // batch_size)
+                    test_cost_plot[fold][iter] = test(testFoldX, testFoldY)[1]
+                    err = test_cost_plot[fold][iter]
+                    if err < min_cost:
+                        min_cost = err
+                fold_cost = np.append(fold_cost, min_cost)
+            # test cost for each value
+            test_cost = np.append(test_cost, np.mean(fold_cost))
+            plt.figure()
+            plt.plot(range(epochs), np.mean(train_cost_plot, axis=0), label='train error')
+            plt.plot(range(epochs), np.mean(test_cost_plot, axis=0), label='validation error')
+            plt.xlabel('Epochs')
+            plt.ylabel('Mean Squared Error')
+            plt.title('Training and Validation Errors at Alpha = %f' % alpha.get_value())
+            plt.legend()
+            plt.savefig('p_1b_alpha_mse_%f.png' % alpha.get_value())
+            plt.show()
+            print("Test cost:", test_cost)
+        # array of value with least test cost for each experiment
+        opt_val = np.append(opt_val, values[np.argmin(test_cost)])
+
+    # Select best value of parameter
+    counts = []
+    for val in values:
+        counts = np.append(counts, np.sum(opt_val == val))
+    # print(counts)
+    opt_val = values[np.argmax(counts)]
+    return opt_val
+
+
 def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
     min_error = 1e+15
     best_iter = 0
-    best_w_o = np.zeros(no_hidden2)
+    best_w_o = np.zeros(no_hidden1)
     best_w_h1 = np.zeros([no_features, no_hidden1])
-    best_w_h2 = np.zeros([no_hidden1, no_hidden2])
     best_b_o = 0
     best_b_h1 = np.zeros(no_hidden1)
-    best_b_h2 = np.zeros(no_hidden2)
 
     train_cost = np.zeros(epochs)
     test_cost = np.zeros(epochs)
     test_accuracy = np.zeros(epochs)
 
-    reset_weights()
+    reset_weights(no_hidden1)
 
     # train with best value
     for iter in range(epochs):
@@ -147,10 +197,7 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
             print("Iter:", iter)
 
         trainX, trainY = shuffle_data(trainX, trainY)
-        for start, end in zip(range(0, len(trainX), batch_size),
-                              range(batch_size, len(trainX), batch_size)):
-            train_cost[iter] += train(trainX[start:end], trainY[start:end])
-        train_cost[iter] /= (len(trainX) // batch_size)
+        train_cost[iter] = train(trainX, trainY)
         pred, test_cost[iter], test_accuracy[iter] = test(testX, testY)
 
         if test_cost[iter] < min_error:
@@ -158,18 +205,14 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
             min_error = test_cost[iter]
             best_w_o = w_o.get_value()
             best_w_h1 = w_h1.get_value()
-            best_w_h2 = w_h2.get_value()
             best_b_o = b_o.get_value()
             best_b_h1 = b_h1.get_value()
-            best_b_h2 = b_h2.get_value()
 
     # set weights and biases to values at which performance was best
     w_o.set_value(best_w_o)
     b_o.set_value(best_b_o)
     w_h1.set_value(best_w_h1)
     b_h1.set_value(best_b_h1)
-    w_h2.set_value(best_w_h2)
-    b_h2.set_value(best_b_h2)
 
     best_pred, best_cost, best_accuracy = test(testX, testY)
 
@@ -199,9 +242,11 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
 np.random.seed(10)
 epochs = 100
 batch_size = 32
-no_hidden1 = 60  # num of neurons in hidden layer 1
-no_hidden2 = 20
+no_hidden1 = 30  # num of neurons in hidden layer 1
 learning_rate = 0.0001
+no_folds = 5
+no_exps = 1
+values = [10 ** -3, 0.5 * 10 ** -3, 10 ** -4, 0.5 * 10 ** -4, 10 ** -5]
 
 trainX, testX, trainY, testY = preprocess_data('cal_housing.data')
 
@@ -210,6 +255,11 @@ no_output = trainY.shape[1]
 
 alpha = theano.shared(learning_rate, theano.config.floatX)
 
-w_o, w_h1, w_h2, b_o, b_h1, b_h2 = initialize_weights_bias()
+w_o, w_h1, b_o, b_h1 = initialize_weights()
 train, test = create_nn()
+train(trainX, trainY)
+opt_val = kfold(no_exps, values, no_folds, epochs, trainX, trainY, train, test)
+print("Optimum value: ", opt_val)
+alpha.set_value(opt_val)
+
 run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs)
