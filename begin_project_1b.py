@@ -90,7 +90,7 @@ no_samples = T.scalar('no_samples')
 # w_h1 = theano.shared(np.random.randn(no_features, no_hidden1)*.01, floatX )
 # b_h1 = theano.shared(np.random.randn(no_hidden1)*0.01, floatX)
 
-w_o = init_weights(no_hidden1, 1)
+w_o = init_weights(no_hidden1, 1, False)
 w_h1 = init_weights(no_features, no_hidden1)
 b_o = init_bias(1)
 b_h1 = init_bias(no_hidden1)
@@ -102,7 +102,7 @@ alpha = theano.shared(learning_rate, floatX)
 h1_out = T.nnet.sigmoid(T.dot(x, w_h1) + b_h1)
 y = T.dot(h1_out, w_o) + b_o
 
-cost = T.abs_(T.mean(T.sqr(d - y)))
+cost = T.abs_(T.mean(T.sqr(d- y)))
 accuracy = T.mean(d - y)
 
 #define gradients
@@ -147,12 +147,10 @@ for exp in range(noExps):
     test_cost = []
 
     for val in values:
-        train_cost_plot = np.zeros([no_folds, epochs])
-        test_cost_plot = np.zeros([no_folds, epochs])
         print("Iteration: ", val)
 
         # reinitialize
-        set_weights(w_o, no_hidden1, 1)
+        set_weights(w_o, no_hidden1, 1, False)
         set_weights(w_h1, no_features, no_hidden1)
         set_bias(b_o, 1)
         set_bias(b_h1, no_hidden1)
@@ -161,38 +159,30 @@ for exp in range(noExps):
         alpha.set_value(val)
 
         fold_cost = []
-        for fold in range(no_folds):
+        for fold in range(5):
             start, end = fold * fold_division, (fold + 1) * fold_division
             testFoldX, testFoldY = trainX[start:end], trainY[start:end]
             trainFoldX, trainFoldY = np.append(trainX[:start], trainX[end:], axis=0), np.append(trainY[:start], trainY[end:], axis=0)
 
             # reset weights
-            set_weights(w_o, no_hidden1, 1)
+            set_weights(w_o, no_hidden1, 1, False)
             set_weights(w_h1, no_features, no_hidden1)
             set_bias(b_o, 1)
             set_bias(b_h1, no_hidden1)
 
             min_cost = 1e+15
             for iter in range(epochs):
-                train_cost_plot[fold][iter] = train(trainFoldX, np.transpose(trainFoldY))
-                test_cost_plot[fold][iter] = test(testFoldX, np.transpose(testFoldY))[1]
-                err = test_cost_plot[fold][iter]
+                cost = 0
+                for start, end in zip(range(0, len(trainFoldX), batch_size), range(batch_size, len(trainFoldX), batch_size)):
+                    #TODO: what is cost used for?
+                    cost += train(trainFoldX[start:end], np.transpose(trainFoldY[start:end]))
+                err = test(testFoldX, np.transpose(testFoldY))[1]
                 if err < min_cost:
                     min_cost = err
             fold_cost = np.append(fold_cost, min_cost)
         # test cost for each value
         test_cost = np.append(test_cost, np.mean(fold_cost))
         print("Test cost:", test_cost)
-
-        plt.figure()
-        plt.plot(range(epochs), np.mean(train_cost_plot, axis=0), label='train error')
-        plt.plot(range(epochs), np.mean(test_cost_plot, axis=0), label='validation error')
-        plt.xlabel('Epochs')
-        plt.ylabel('Mean Squared Error')
-        plt.title('Training and Validation Errors at Alpha = %f' % alpha.get_value())
-        plt.legend()
-        plt.savefig('p_1b_alpha_mse_%f.png' % alpha.get_value())
-        plt.show()
     # array of value with least test cost for each experiment (in array index)
     opt_val = np.append(opt_val, values[np.argmin(test_cost)])
 
@@ -201,7 +191,7 @@ counts = []
 for val in values:
     counts = np.append(counts, np.sum(opt_val == val))
 print(counts)
-opt_val = opt_val[np.argmax(counts)]
+opt_val = values[np.argmax(counts)]
 
 print("Optimum value:", opt_val)
 
@@ -216,7 +206,7 @@ test_accuracy = np.zeros(epochs)
 # w_h1 = theano.shared(np.random.randn(no_features, no_hidden1)*.01, floatX )
 # b_h1 = theano.shared(np.random.randn(no_hidden1)*0.01, floatX)
 
-set_weights(w_o, no_hidden1, 1)
+set_weights(w_o, no_hidden1, 1, False)
 set_weights(w_h1, no_features, no_hidden1)
 set_bias(b_o, 1)
 set_bias(b_h1, no_hidden1)
