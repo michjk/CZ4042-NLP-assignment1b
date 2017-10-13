@@ -4,8 +4,6 @@ import theano
 import theano.tensor as T
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
 
 # scale and normalize input data
 def scale(X, X_min, X_max):
@@ -148,13 +146,13 @@ def run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs
 
     best_pred, best_cost, best_accuracy = test(testX, testY)
 
-    print('Minimum error: %.1f, Best accuracy %.1f, Number of Iterations: %d' % (best_cost, best_accuracy, best_iter))
+    print('Minimum error: %f, Best accuracy %.1f, Number of Iterations: %d' % (best_cost, best_accuracy, best_iter))
 
     # Plots
     plt.figure()
     plt.plot(range(epochs), train_cost, label='train error')
     plt.plot(range(epochs), test_cost, label='test error')
-    plt.xlabel('Time (s)')
+    plt.xlabel('Epochs')
     plt.ylabel('Mean Squared Error')
     plt.title('Training and Test Errors at Alpha = %.5f' % alpha.get_value())
     plt.legend()
@@ -170,6 +168,7 @@ def kfold_alpha(no_exps, values, no_fold, epochs, trainX, trainY, train, test, n
     for exp in range(no_exps):
         trainX, trainY = shuffle_data(trainX, trainY)
         test_cost = []
+
         for val in values:
             print("Exp, Iteration:", exp, ",", val)
             reset_weights_3_layer(no_features, no_hidden1, no_output)
@@ -192,6 +191,7 @@ def kfold_alpha(no_exps, values, no_fold, epochs, trainX, trainY, train, test, n
             # test cost for each value
             test_cost = np.append(test_cost, np.mean(fold_cost))
         print("Test cost:", test_cost)
+
         # array of value with least test cost for each experiment
         opt_val = np.append(opt_val, values[np.argmin(test_cost)])
 
@@ -206,13 +206,13 @@ def kfold_alpha(no_exps, values, no_fold, epochs, trainX, trainY, train, test, n
 
 # Scale, normalize, and separate data to train/test
 np.random.seed(10)
-epochs = 100
+epochs = 1000
 batch_size = 32
-no_hidden1 = 60  # num of neurons in hidden layer 1
+no_hidden1 = 30  # num of neurons in hidden layer 1
 learning_rate = 0.0001
 no_folds = 5
-no_exps = 5
-values = [10 ** -3, 0.5 * 10 ** -3, 10 ** -4, 0.5 * 10 ** -4, 10 ** -5]
+no_exps = 1
+alpha_values = [10 ** -3, 0.5 * 10 ** -3, 10 ** -4, 0.5 * 10 ** -4, 10 ** -5]
 
 trainX, testX, trainY, testY = preprocess_data('cal_housing.data')
 
@@ -223,8 +223,8 @@ alpha = theano.shared(learning_rate, theano.config.floatX)
 
 w_o, w_h1, b_o, b_h1 = initialize_weights_bias_3_layer(no_features, no_hidden1, no_output)
 train, test = create_3_layer_nn()
-opt_val = kfold_alpha(no_exps, values, no_folds, epochs, trainX, trainY, train, test, no_features, no_hidden1, no_output)
-print("Optimum value: ", opt_val)
-alpha.set_value(opt_val)
+learning_rate = kfold_alpha(no_exps, alpha_values, no_folds, epochs, trainX, trainY, train, test, no_features, no_hidden1, no_output)
+print("Best learning rate: ", learning_rate)
+alpha.set_value(learning_rate)
 
 run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_output)

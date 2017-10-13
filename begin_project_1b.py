@@ -4,8 +4,6 @@ import theano
 import theano.tensor as T
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
 
 # scale and normalize input data
 def scale(X, X_min, X_max):
@@ -156,7 +154,7 @@ def run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs
     plt.plot(range(epochs), test_cost, label='test error')
     plt.xlabel('Time (s)')
     plt.ylabel('Mean Squared Error')
-    plt.title('Training and Test Errors at Alpha = %.3f' % alpha.get_value())
+    plt.title('Training and Test Errors at Alpha = %.5f' % alpha.get_value())
     plt.legend()
     plt.savefig('p_1b_mse.png')
     plt.show()
@@ -165,7 +163,7 @@ def run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs
 np.random.seed(10)
 epochs = 1000
 batch_size = 32
-no_hidden1 = 60  # num of neurons in hidden layer 1
+no_hidden1 = 30  # num of neurons in hidden layer 1
 learning_rate = 0.0001
 
 trainX, testX, trainY, testY = preprocess_data('cal_housing.data')

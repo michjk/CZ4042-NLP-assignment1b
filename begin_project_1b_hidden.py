@@ -155,7 +155,7 @@ def run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs
     plt.plot(range(epochs), test_cost, label='test error')
     plt.xlabel('Time (s)')
     plt.ylabel('Mean Squared Error')
-    plt.title('Training and Test Errors at Hidden Layers = %d' % no_hidden1)
+    plt.title('Training and Test Errors at Hidden Neuron = %d' % no_hidden1)
     plt.legend()
     plt.savefig('p_1b_mse_hidden.png')
     plt.show()
@@ -204,13 +204,13 @@ def kfold_hidden(no_exps, values, no_fold, epochs, trainX, trainY, train, test, 
 
 # Scale, normalize, and separate data to train/test
 np.random.seed(10)
-epochs = 100
+epochs = 1000
 batch_size = 32
 no_hidden1 = 30  # num of neurons in hidden layer 1
-learning_rate = 10**-3
+learning_rate = 0.5 * 10**-3
 no_folds = 5
-no_exps = 5
-values = [20, 30, 40, 50, 60]
+no_exps = 1
+hidden_values = [20, 30, 40, 50, 60]
 
 trainX, testX, trainY, testY = preprocess_data('cal_housing.data')
 
@@ -221,8 +221,7 @@ alpha = theano.shared(learning_rate, theano.config.floatX)
 
 w_o, w_h1, b_o, b_h1 = initialize_weights_bias_3_layer(no_features, no_hidden1, no_output)
 train, test = create_3_layer_nn()
-opt_val = kfold_hidden(no_exps, values, no_folds, epochs, trainX, trainY, train, test, no_features, no_hidden1, no_output)
-print("Optimum value: ", opt_val)
-no_hidden1 = opt_val
+no_hidden1 = kfold_hidden(no_exps, hidden_values, no_folds, epochs, trainX, trainY, train, test, no_features, no_hidden1, no_output)
+print("Best hidden neuron number: ", no_hidden1)
 
 run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_output)
