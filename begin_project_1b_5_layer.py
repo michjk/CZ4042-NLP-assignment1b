@@ -6,13 +6,8 @@ import theano.tensor as T
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-
-# scale and normalize input data
 def scale(X, X_min, X_max):
     return (X - X_min) / (X_max - X_min)
-
-def normalize(X, X_mean, X_std):
-    return (X - X_mean) / X_std
 
 def shuffle_data(samples, labels):
     idx = np.arange(samples.shape[0])
@@ -58,20 +53,15 @@ def preprocess_data(dataset):
 
     # scale and normalize data
     trainX_max, trainX_min = np.max(trainX, axis=0), np.min(trainX, axis=0)
-    testX_max, testX_min = np.max(testX, axis=0), np.min(testX, axis=0)
+    trainY_max, trainY_min = np.max(trainY, axis=0), np.min(trainY, axis=0)
+    # testX_max, testX_min = np.max(testX, axis=0), np.min(testX, axis=0)
 
-    trainX = scale(trainX, trainX_min, trainX_max)
-    testX = scale(testX, testX_min, testX_max)
-
-    trainX_mean, trainX_std = np.mean(trainX, axis=0), np.std(trainX, axis=0)
-    testX_mean, testX_std = np.mean(testX, axis=0), np.std(testX, axis=0)
-
-    trainX = normalize(trainX, trainX_mean, trainX_std)
-    testX = normalize(testX, testX_mean, testX_std)
+    trainX, trainY = scale(trainX, trainX_min, trainX_max), scale(trainY, trainY_min, trainY_max)
+    testX, testY = scale(testX, trainX_min, trainX_max), scale(testY, trainY_min, trainY_max)
 
     return trainX, testX, trainY, testY
 
-def initialize_weights_bias():
+def initialize_weights_bias_5_layer(no_features, no_hidden1, no_hidden2, no_hidden3, no_output):
     w_o = init_weights(no_hidden3, no_output, False)
     w_h1 = init_weights(no_features, no_hidden1)
     w_h2 = init_weights(no_hidden1, no_hidden2)
@@ -82,7 +72,7 @@ def initialize_weights_bias():
     b_h3 = init_bias(no_hidden3)
     return w_o, w_h1, w_h2, w_h3, b_o, b_h1, b_h2, b_h3
 
-def reset_weights():
+def reset_weights_5_layer(no_features, no_hidden1, no_hidden2, no_hidden3, no_output):
     set_weights(w_o, no_hidden3, no_output, False)
     set_weights(w_h1, no_features, no_hidden1)
     set_weights(w_h2, no_hidden1, no_hidden2)
@@ -92,7 +82,7 @@ def reset_weights():
     set_bias(b_h2, no_hidden2)
     set_bias(b_h3, no_hidden3)
 
-def create_nn():
+def create_5_layer_nn():
     x = T.matrix('x')  # data sample
     d = T.matrix('d')  # desired output
     no_samples = T.scalar('no_samples')
@@ -131,7 +121,7 @@ def create_nn():
 
     return train, test
 
-def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
+def run_nn_5_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_hidden2, no_hidden3, no_output):
     min_error = 1e+15
     best_iter = 0
     best_w_o = np.zeros(no_hidden3)
@@ -147,7 +137,7 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
     test_cost = np.zeros(epochs)
     test_accuracy = np.zeros(epochs)
 
-    reset_weights()
+    reset_weights_5_layer(no_features, no_hidden1, no_hidden2, no_hidden3, no_output)
 
     # train with best value
     for iter in range(epochs):
@@ -155,10 +145,7 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
             print("Iter:", iter)
 
         trainX, trainY = shuffle_data(trainX, trainY)
-        for start, end in zip(range(0, len(trainX), batch_size),
-                              range(batch_size, len(trainX), batch_size)):
-            train_cost[iter] += train(trainX[start:end], trainY[start:end])
-        train_cost[iter] /= (len(trainX) // batch_size)
+        train_cost[iter] = train(trainX, trainY)
         pred, test_cost[iter], test_accuracy[iter] = test(testX, testY)
 
         if test_cost[iter] < min_error:
@@ -193,23 +180,14 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
     plt.plot(range(epochs), test_cost, label='test error')
     plt.xlabel('Time (s)')
     plt.ylabel('Mean Squared Error')
-    plt.title('Training and Test Errors at Alpha = %.3f' % alpha.get_value())
+    plt.title('Training and Test Errors at Alpha = %.5f' % alpha.get_value())
     plt.legend()
-    plt.savefig('p_1b_mse.png')
+    plt.savefig('p_1b_mse_5_layer.png')
     plt.show()
-
-    plt.figure()
-    plt.plot(range(epochs), test_accuracy)
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Test Accuracy')
-    plt.savefig('p_1b_accuracy.png')
-    plt.show()
-
 
 # Scale, normalize, and separate data to train/test
 np.random.seed(10)
-epochs = 100
+epochs = 1000
 batch_size = 32
 no_hidden1 = 60  # num of neurons in hidden layer 1
 no_hidden3 = no_hidden2 = 20
@@ -222,6 +200,6 @@ no_output = trainY.shape[1]
 
 alpha = theano.shared(learning_rate, theano.config.floatX)
 
-w_o, w_h1, w_h2, w_h3, b_o, b_h1, b_h2, b_h3 = initialize_weights_bias()
-train, test = create_nn()
-run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs)
+w_o, w_h1, w_h2, w_h3, b_o, b_h1, b_h2, b_h3 = initialize_weights_bias_5_layer(no_features, no_hidden1, no_hidden2, no_hidden3, no_output)
+train, test = create_5_layer_nn()
+run_nn_5_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_hidden2, no_hidden3, no_output)

@@ -11,9 +11,6 @@ from mpl_toolkits.mplot3d import Axes3D
 def scale(X, X_min, X_max):
     return (X - X_min) / (X_max - X_min)
 
-def normalize(X, X_mean, X_std):
-    return (X - X_mean) / X_std
-
 def shuffle_data(samples, labels):
     idx = np.arange(samples.shape[0])
     np.random.shuffle(idx)
@@ -58,34 +55,28 @@ def preprocess_data(dataset):
 
     # scale and normalize data
     trainX_max, trainX_min = np.max(trainX, axis=0), np.min(trainX, axis=0)
-    testX_max, testX_min = np.max(testX, axis=0), np.min(testX, axis=0)
+    trainY_max, trainY_min = np.max(trainY, axis=0), np.min(trainY, axis=0)
+    # testX_max, testX_min = np.max(testX, axis=0), np.min(testX, axis=0)
 
-    trainX = scale(trainX, trainX_min, trainX_max)
-    testX = scale(testX, testX_min, testX_max)
-
-    trainX_mean, trainX_std = np.mean(trainX, axis=0), np.std(trainX, axis=0)
-    testX_mean, testX_std = np.mean(testX, axis=0), np.std(testX, axis=0)
-
-    trainX = normalize(trainX, trainX_mean, trainX_std)
-    testX = normalize(testX, testX_mean, testX_std)
+    trainX, trainY = scale(trainX, trainX_min, trainX_max), scale(trainY, trainY_min, trainY_max)
+    testX, testY = scale(testX, trainX_min, trainX_max), scale(testY, trainY_min, trainY_max)
 
     return trainX, testX, trainY, testY
 
-def initialize_weights_bias():
+def initialize_weights_bias_3_layer(no_features, no_hidden1, no_output):
     w_o = init_weights(no_hidden1, no_output, False)
     w_h1 = init_weights(no_features, no_hidden1)
     b_o = init_bias(no_output)
     b_h1 = init_bias(no_hidden1)
-
     return w_o, w_h1, b_o, b_h1
 
-def reset_weights():
+def reset_weights_3_layer(no_features, no_hidden1, no_output):
     set_weights(w_o, no_hidden1, no_output, False)
     set_weights(w_h1, no_features, no_hidden1)
     set_bias(b_o, no_output)
     set_bias(b_h1, no_hidden1)
 
-def create_nn():
+def create_3_layer_nn():
     x = T.matrix('x')  # data sample
     d = T.matrix('d')  # desired output
     no_samples = T.scalar('no_samples')
@@ -118,7 +109,7 @@ def create_nn():
 
     return train, test
 
-def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
+def run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_output):
     min_error = 1e+15
     best_iter = 0
     best_w_o = np.zeros(no_hidden1)
@@ -130,7 +121,7 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
     test_cost = np.zeros(epochs)
     test_accuracy = np.zeros(epochs)
 
-    reset_weights()
+    reset_weights_3_layer(no_features, no_hidden1, no_output)
 
     # train with best value
     for iter in range(epochs):
@@ -138,11 +129,7 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
             print("Iter:", iter)
 
         trainX, trainY = shuffle_data(trainX, trainY)
-        for start, end in zip(range(0, len(trainX), batch_size),
-                              range(batch_size, len(trainX), batch_size)):
-            train_cost[iter] += train(trainX[start:end], trainY[start:end])
-        train_cost[iter] /= (len(trainX) // batch_size)
-        # train_cost[iter] = train(trainX, trainY)
+        train_cost[iter] = train(trainX, trainY)
         pred, test_cost[iter], test_accuracy[iter] = test(testX, testY)
 
         if test_cost[iter] < min_error:
@@ -174,15 +161,6 @@ def run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs):
     plt.savefig('p_1b_mse.png')
     plt.show()
 
-    plt.figure()
-    plt.plot(range(epochs), test_accuracy)
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Test Accuracy')
-    plt.savefig('p_1b_accuracy.png')
-    plt.show()
-
-
 # Scale, normalize, and separate data to train/test
 np.random.seed(10)
 epochs = 1000
@@ -196,7 +174,6 @@ no_features = trainX.shape[1]
 no_output = trainY.shape[1]
 
 alpha = theano.shared(learning_rate, theano.config.floatX)
-
-w_o, w_h1, b_o, b_h1 = initialize_weights_bias()
-train, test = create_nn()
-run_nn(train, test, batch_size, trainX, trainY, testX, testY, epochs)
+w_o, w_h1, b_o, b_h1 = initialize_weights_bias_3_layer(no_features, no_hidden1, no_output)
+train, test = create_3_layer_nn()
+run_nn_3_layer(train, test, batch_size, trainX, trainY, testX, testY, epochs, no_features, no_hidden1, no_output)
